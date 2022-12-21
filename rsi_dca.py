@@ -93,7 +93,6 @@ def start_dca():
                 quantity=btc_amount
             )
 
-            # 
             print(f'Placed market buy order for {btc_amount:.8f} BTC at a price of {btc_price:.2f} USDT')
         else:
             print (f' The RSI indicator does not meet require conditions \n {last_rsi}')
