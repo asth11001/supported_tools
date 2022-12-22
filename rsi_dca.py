@@ -11,7 +11,7 @@ trading_pair = "BTCUSDT"
 interval = Client.KLINE_INTERVAL_4HOUR
 date = "1 Jan, 2017" 
 rsi_threshold = 30 
-min_order_size = 10 #минимальный размер ордера на Бинансе
+min_order_size = 10.1 #минимальный размер ордера на Бинансе
 
 
 def get_balance_usdt ():
@@ -39,8 +39,8 @@ def get_ohlc(trading_pair, interval, date):
 def set_order_size():
     #определяем размер ордера в зависимости от размера баланса
     initial_balance = get_balance_usdt()
-    if ((initial_balance > 10) & (initial_balance < 100)).all():
-        order_size = 11
+    if ((initial_balance > 10.1) & (initial_balance < 100)).all():
+        order_size = 10.1
         return order_size
     elif ((initial_balance > 101) & (initial_balance < 300)).all():
         order_size = 15
@@ -96,7 +96,7 @@ def start_dca():
             print(f'Placed market buy order for {btc_amount:.8f} BTC at a price of {btc_price:.2f} USDT')
         else:
             print (f' The RSI indicator does not meet require conditions \n {last_rsi}')
-        time.sleep(3600)
+        time.sleep(14400)
         
         
 start_dca()
