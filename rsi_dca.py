@@ -110,8 +110,8 @@ def set_order_size():
 def qfl_single_tf(
         ohlc: pd.DataFrame,
         volume_ma: int = 6,
-        percentage: float = 22.1,
-        percentage_sell: float = 10.1,
+        percentage: float = 3.5,
+        percentage_sell: float = 3.5,
         max_base_age: int = 0,
         allow_consecutive_signals: bool = True):
     # Считаем обьем скользящей средней
@@ -156,15 +156,15 @@ def qfl_single_tf(
     ohlc["fractal_down"] = fractal_down
 
     # Считаем бары с момента последнего увеличения/уменьшения бара
-    ohlc["age"] = ohlc["fractal_up"].notnull().cumsum()
+    ohlc["age"] = ohlc["fractal_down"].notnull().cumsum()
     ohlc["age"] = ohlc.apply(
-        lambda x: x["age"] if x["fractal_up"] is not None else None, axis=1
+        lambda x: x["age"] if x["fractal_down"] is not None else None, axis=1
     )
     ohlc["age"] = ohlc["age"].fillna(method="ffill")
 
     # Считаем сигнали на покупку/продажу
     ohlc["buy"] = (ohlc["close"] / ohlc["fractal_down"]) < (1 - percentage / 100)
-    ohlc["sell"] = (ohlc["close"] / ohlc["fractal_up"]) > (1 + percentage_sell / 100)
+    # ohlc["sell"] = (ohlc["close"] / ohlc["fractal_up"]) > (1 + percentage_sell / 100)
 
     # Фильтруем сигнал на покупку
     def shift_if_not_float(x):
