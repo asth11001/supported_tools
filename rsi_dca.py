@@ -29,19 +29,19 @@ price_lotsize = {
     "BTCUSDT": 2,
     "ETHUSDT": 2,
     "ADAUSDT": 4,
-    "BNBUSDT": 3,
+    "BNBUSDT": 1,
     "NEOUSDT": 2,
-    "LTCUSDT": 3,
-    "MINAUSDT": 1
+    "LTCUSDT": 2,
+    "MINAUSDT": 3
 }
 amount_lotsize = {
     "BTCUSDT": 5,
     "ETHUSDT": 4,
     "ADAUSDT": 1,
-    "BNBUSDT": 1,
+    "BNBUSDT": 3,
     "NEOUSDT": 2,
-    "LTCUSDT": 2,
-    "MINAUSDT": 3
+    "LTCUSDT": 3,
+    "MINAUSDT": 1
 }
 order_history = pd.DataFrame({
                     'date': [],
@@ -118,13 +118,6 @@ def qfl_single_tf(
     ohlc["volume_ma"] = ohlc["volume"].rolling(volume_ma).mean()
 
     # Считаем значение QFL сигнала
-    ohlc["up"] = (
-        (ohlc["high"].shift(3) > ohlc["high"].shift(4))
-        & (ohlc["high"].shift(4) > ohlc["high"].shift(5))
-        & (ohlc["high"].shift(2) < ohlc["high"].shift(3))
-        & (ohlc["high"].shift(1) < ohlc["high"].shift(2))
-        & (ohlc["volume"].shift(3) > ohlc["volume_ma"].shift(3))
-    )
     ohlc["down"] = (
         (ohlc["low"].shift(3) > ohlc["low"].shift(4))
         & (ohlc["low"].shift(4) > ohlc["low"].shift(5))
@@ -134,7 +127,6 @@ def qfl_single_tf(
     )
 
     # Считаем значения fractal
-    fractal_up = []
     fractal_down = []
     for i in range(len(ohlc)):
         if ohlc.iloc[i]["up"]:
@@ -152,7 +144,6 @@ def qfl_single_tf(
             fractal_down.append(None)
 
     # Добавляем значения в датасэт
-    ohlc["fractal_up"] = fractal_up
     ohlc["fractal_down"] = fractal_down
 
     # Считаем бары с момента последнего увеличения/уменьшения бара
@@ -164,7 +155,6 @@ def qfl_single_tf(
 
     # Считаем сигнали на покупку/продажу
     ohlc["buy"] = (ohlc["close"] / ohlc["fractal_down"]) < (1 - percentage / 100)
-    # ohlc["sell"] = (ohlc["close"] / ohlc["fractal_up"]) > (1 + percentage_sell / 100)
 
     # Фильтруем сигнал на покупку
     def shift_if_not_float(x):
@@ -176,15 +166,6 @@ def qfl_single_tf(
         and (
             allow_consecutive_signals
             or x["fractal_down"] != shift_if_not_float(x["fractal_down"])
-        )
-        and (max_base_age == 0 or x["age"] < max_base_age),
-        axis=1,
-    )
-    ohlc["sell"] = ohlc.apply(
-        lambda x: x["sell"]
-        and (
-            allow_consecutive_signals
-            or x["fractal_up"] != shift_if_not_float(x["fractal_up"])
         )
         and (max_base_age == 0 or x["age"] < max_base_age),
         axis=1,
