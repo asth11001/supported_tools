@@ -9,7 +9,7 @@ api_key = "your key"
 secret_key = "your secret key"
 client = Client(api_key=api_key, api_secret=secret_key, tld="com")
 interval = Client.KLINE_INTERVAL_4HOUR
-date = "1 Dec, 2022"
+date = "7 days ago UTC"
 rsi_threshold = 30
 qfl_threshold = True
 min_order_size = 10.1  # минимальный размер ордера на Бинансе
