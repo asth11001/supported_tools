@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 
+
 def get_binance_trading_pairs():
     binance_url = "https://api.binance.com/api/v3/ticker/price"
     response = requests.get(binance_url)
@@ -15,7 +16,13 @@ def get_gateio_trading_pairs():
     trading_pairs = [pair['id'].replace("_", "") for pair in data if pair['id'].endswith('_USDT')]
     return trading_pairs
 
-def get_last_price(exchange, symbol):
+def get_matched_trading_pairs():
+    binance_pairs = get_binance_trading_pairs()
+    gateio_pairs = get_gateio_trading_pairs()
+    matched_pairs = list(set(binance_pairs).intersection(gateio_pairs))
+    return matched_pairs
+
+def get_bids(exchange, symbol):
     if exchange == 'binance':
         binance_url = f"https://api.binance.com/api/v3/depth?symbol={symbol}" 
         response = requests.get(binance_url)
@@ -29,25 +36,47 @@ def get_last_price(exchange, symbol):
         response = requests.get(gateio_url)
         data = response.json()
         try:
+            return data['bids'][0][0]
+        except IndexError:
+            return 1000
+        
+def get_asks(exchange, symbol):
+    if exchange == 'binance':
+        binance_url = f"https://api.binance.com/api/v3/depth?symbol={symbol}" 
+        response = requests.get(binance_url)
+        data = response.json()
+        try:
+            return data['asks'][0][0]
+        except IndexError:
+            return 1000
+    elif exchange == 'gateio':
+        gateio_url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}" 
+        response = requests.get(gateio_url)
+        data = response.json()
+        try:
             return data['asks'][0][0]
         except IndexError:
             return 1000
 
-def get_matched_trading_pairs():
-    binance_pairs = get_binance_trading_pairs()
-    gateio_pairs = get_gateio_trading_pairs()
-    matched_pairs = list(set(binance_pairs).intersection(gateio_pairs))
-    return matched_pairs
 
 matched_trading_pairs = get_matched_trading_pairs()
 data = []
 for pair in matched_trading_pairs:
-    binance_last_price = float(get_last_price('binance', pair))
-    gateio_pair = pair[:-4] + "_" + pair[-4:] # change for quote asset
-    gateio_last_price = float(get_last_price('gateio', gateio_pair))
-    spread = round((abs (binance_last_price - gateio_last_price)) / binance_last_price * 100, 2)
-    dataset = [pair, spread]
+    gateio_pair = pair[:-4] + "_" + pair[-4:]
+    binance_bid = float(get_bids('binance', pair))
+    gateio_bid = float(get_bids('gateio', gateio_pair))
+    binance_ask = float(get_asks('binance', pair))
+    gateio_ask = float(get_asks('gateio', gateio_pair))
+    if binance_ask > gateio_ask or binance_bid > gateio_bid:
+        spread = round((abs (binance_ask - gateio_bid)) / binance_ask * 100, 2)
+        side = 'bin'
+    else: 
+        spread = round((abs (gateio_ask - binance_bid)) / gateio_ask * 100, 2)
+        side = 'gate'
+    if spread < 50:
+        dataset = [pair , spread, side]
     data.append(dataset)
+    
 
-df = pd.DataFrame(data, columns=['Pair', 'Spread'])
-df.to_csv(r'Your/path.csv', sep='\t', encoding='utf-8', header='true')
+df = pd.DataFrame(data, columns=['Pair', 'Spread', 'Side'])
+df.to_csv(r'your_path.csv', sep='\t', encoding='utf-8', header='true')
