@@ -1,3 +1,5 @@
+import aiohttp
+import asyncio
 import requests
 import pandas as pd
 
@@ -6,15 +8,19 @@ def get_binance_trading_pairs():
     binance_url = "https://api.binance.com/api/v3/ticker/price"
     response = requests.get(binance_url)
     data = response.json()
-    trading_pairs = [pair['symbol'] for pair in data if pair['symbol'].endswith('USDT')]
+    trading_pairs = [pair['symbol'] for pair in data if pair['symbol']
+                     .endswith('USDT')]
     return trading_pairs
+
 
 def get_gateio_trading_pairs():
     gateio_url = "https://api.gateio.ws/api/v4/spot/currency_pairs"
     response = requests.get(gateio_url)
     data = response.json()
-    trading_pairs = [pair['id'].replace("_", "") for pair in data if pair['id'].endswith('_USDT')]
+    trading_pairs = [pair['id'].replace("_", "") for pair in data if pair['id']
+                     .endswith('_USDT')]
     return trading_pairs
+
 
 def get_matched_trading_pairs():
     binance_pairs = get_binance_trading_pairs()
@@ -22,61 +28,82 @@ def get_matched_trading_pairs():
     matched_pairs = list(set(binance_pairs).intersection(gateio_pairs))
     return matched_pairs
 
-def get_bids(exchange, symbol):
-    if exchange == 'binance':
-        binance_url = f"https://api.binance.com/api/v3/depth?symbol={symbol}" 
-        response = requests.get(binance_url)
-        data = response.json()
+
+async def fetch_order_book(session, url):
+    async with session.get(url) as response:
+        data = await response.json()
         try:
-            return data['bids'][0][0]
-        except IndexError:
-            return 1000
-    elif exchange == 'gateio':
-        gateio_url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}" 
-        response = requests.get(gateio_url)
-        data = response.json()
-        try:
-            return data['bids'][0][0]
-        except IndexError:
-            return 1000
-        
-def get_asks(exchange, symbol):
-    if exchange == 'binance':
-        binance_url = f"https://api.binance.com/api/v3/depth?symbol={symbol}" 
-        response = requests.get(binance_url)
-        data = response.json()
-        try:
-            return data['asks'][0][0]
-        except IndexError:
-            return 1000
-    elif exchange == 'gateio':
-        gateio_url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}" 
-        response = requests.get(gateio_url)
-        data = response.json()
-        try:
-            return data['asks'][0][0]
-        except IndexError:
-            return 1000
+            bids = float(data['bids'][0][0])
+            asks = float(data['asks'][0][0])
+        except (IndexError, KeyError):
+            bids = index_error_ask_bid
+            asks = index_error_ask_bid
+        return asks, bids
 
 
-matched_trading_pairs = get_matched_trading_pairs()
-data = []
-for pair in matched_trading_pairs:
-    gateio_pair = pair[:-4] + "_" + pair[-4:]
-    binance_bid = float(get_bids('binance', pair))
-    gateio_bid = float(get_bids('gateio', gateio_pair))
-    binance_ask = float(get_asks('binance', pair))
-    gateio_ask = float(get_asks('gateio', gateio_pair))
-    if binance_ask > gateio_ask or binance_bid > gateio_bid:
-        spread = round((abs (binance_ask - gateio_bid)) / binance_ask * 100, 2)
-        side = 'bin'
-    else: 
-        spread = round((abs (gateio_ask - binance_bid)) / gateio_ask * 100, 2)
-        side = 'gate'
-    if spread < 50:
-        dataset = [pair , spread, side]
-    data.append(dataset)
-    
+async def fetch_binance_order_books():
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for pair in matched_pairs:
+            binance_url = f"https://api.binance.com/api/v3/depth?symbol={pair}"
+            tasks.append(fetch_order_book(session, binance_url))
+        results = await asyncio.gather(*tasks)
+        return results
 
-df = pd.DataFrame(data, columns=['Pair', 'Spread', 'Side'])
-df.to_csv(r'your_path.csv', sep='\t', encoding='utf-8', header='true')
+
+async def fetch_gate_order_books():
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for pair in pairs:
+            gate_url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={pair}"
+            tasks.append(fetch_order_book(session, gate_url))
+        results = await asyncio.gather(*tasks)
+        return results
+
+
+async def main():
+    binance_order_book = await fetch_binance_order_books()
+    gate_order_book = await fetch_gate_order_books()
+    data = []
+    for i, pair in enumerate(matched_pairs):
+        binance_ask, binance_bid = binance_order_book[i]
+        gate_ask, gate_bid = gate_order_book[i]
+        if binance_ask == index_error_ask_bid or \
+            binance_bid == index_error_ask_bid or \
+            gate_ask == index_error_ask_bid or \
+                gate_bid == index_error_ask_bid:
+            continue
+        binance_spread = round(binance_ask - binance_bid, 4)
+        binance_spread_perc = round(binance_spread / binance_ask, 4)
+        gate_spread = round(gate_ask - gate_bid, 4)
+        gate_spread_perc = round(gate_spread / gate_ask, 4)
+        if binance_ask - gate_bid > gate_ask - binance_bid:
+            bin_gate_spread = round(binance_ask - gate_bid, 4)
+            bin_gate_spread_perc = round(bin_gate_spread / binance_ask, 4)
+            side = 'bin'
+        else:
+            bin_gate_spread = round(gate_ask - binance_bid, 4)
+            bin_gate_spread_perc = round(bin_gate_spread / gate_ask, 4)
+            side = 'gate'
+        dataset = [pair, gate_ask, gate_bid, gate_spread, gate_spread_perc,
+                   binance_ask, binance_bid, binance_spread, binance_spread_perc,
+                   bin_gate_spread, bin_gate_spread_perc, side]
+        data.append(dataset)
+
+    df = pd.DataFrame(data, columns=['Pair', 'Gate_ask', 'Gate_bid',
+                                      'Gate_spread', 'Gate_spread_percentage',
+                                      'Binance_ask', 'Binance_bid',
+                                      'Binance_spread', 'Binance_spread_percentage',
+                                      'Binance_Gate_spread', 'Binance_Gate_spread_percentage',
+                                      'Hedge_axis'])
+    df.to_csv(r'/Your_path/.csv',
+              sep='\t', encoding='utf-8', header='true')
+
+
+if __name__ == "__main__":
+    matched_pairs = get_matched_trading_pairs()
+    pairs = []
+    index_error_ask_bid = 999999
+    for pair in matched_pairs:
+        pairs.append(pair[:-4] + "_" + pair[-4:])
+    asyncio.run(main())
