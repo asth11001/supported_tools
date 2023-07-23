@@ -8,8 +8,9 @@ def get_binance_trading_pairs():
     binance_url = "https://api.binance.com/api/v3/ticker/price"
     response = requests.get(binance_url)
     data = response.json()
+    #change base asset USDT/BTC/ETH ...
     trading_pairs = [pair['symbol'] for pair in data if pair['symbol']
-                     .endswith('USDT')]
+                     .endswith(base_asset)]
     return trading_pairs
 
 
@@ -17,8 +18,9 @@ def get_gateio_trading_pairs():
     gateio_url = "https://api.gateio.ws/api/v4/spot/currency_pairs"
     response = requests.get(gateio_url)
     data = response.json()
+    #change base asset USDT/BTC/ETH ...
     trading_pairs = [pair['id'].replace("_", "") for pair in data if pair['id']
-                     .endswith('_USDT')]
+                     .endswith('_' + base_asset)]
     return trading_pairs
 
 
@@ -73,17 +75,17 @@ async def main():
             gate_ask == index_error_ask_bid or \
                 gate_bid == index_error_ask_bid:
             continue
-        binance_spread = round(binance_ask - binance_bid, 4)
-        binance_spread_perc = round(binance_spread / binance_ask, 4)
-        gate_spread = round(gate_ask - gate_bid, 4)
-        gate_spread_perc = round(gate_spread / gate_ask, 4)
+        binance_spread = binance_ask - binance_bid
+        binance_spread_perc = binance_spread / binance_ask
+        gate_spread = gate_ask - gate_bid
+        gate_spread_perc = gate_spread / gate_ask
         if binance_ask - gate_bid > gate_ask - binance_bid:
-            bin_gate_spread = round(binance_ask - gate_bid, 4)
+            bin_gate_spread = binance_ask - gate_bid
             bin_gate_spread_perc = round(bin_gate_spread / binance_ask, 4)
             side = 'bin'
         else:
-            bin_gate_spread = round(gate_ask - binance_bid, 4)
-            bin_gate_spread_perc = round(bin_gate_spread / gate_ask, 4)
+            bin_gate_spread = gate_ask - binance_bid
+            bin_gate_spread_perc = round(bin_gate_spread / gate_ask , 4)
             side = 'gate'
         dataset = [pair, gate_ask, gate_bid, gate_spread, gate_spread_perc,
                    binance_ask, binance_bid, binance_spread, binance_spread_perc,
@@ -96,14 +98,16 @@ async def main():
                                       'Binance_spread', 'Binance_spread_percentage',
                                       'Binance_Gate_spread', 'Binance_Gate_spread_percentage',
                                       'Hedge_axis'])
-    df.to_csv(r'/Your_path/.csv',
+    df = df.sort_values(by=['Binance_Gate_spread_percentage'], ascending=False)
+    df.to_csv(r'/Your_path.csv',
               sep='\t', encoding='utf-8', header='true')
 
 
 if __name__ == "__main__":
+    base_asset = 'USDT'
     matched_pairs = get_matched_trading_pairs()
     pairs = []
     index_error_ask_bid = 999999
     for pair in matched_pairs:
-        pairs.append(pair[:-4] + "_" + pair[-4:])
+        pairs.append(pair[:-len(base_asset)] + "_" + pair[-len(base_asset):])
     asyncio.run(main())
