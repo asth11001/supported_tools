@@ -97,7 +97,7 @@ async def main():
                                       'Binance_Gate_spread', 'Binance_Gate_spread_percentage',
                                       'Hedge_axis'])
     df = df.sort_values(by=['Binance_Gate_spread_percentage'], ascending=False)
-    df.to_csv(r'/Users/andrewspasskii/Desktop/arb_scanner.csv',
+    df.to_csv(r'/Desktop/arb_scanner.csv',
               sep='\t', encoding='utf-8', header='true')
 
 
